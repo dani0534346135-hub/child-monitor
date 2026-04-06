@@ -21,36 +21,53 @@
     </div>
 
     <script>
-        const socket = io('https://my-child-monitor.onrender.com'); 
-        const msg = document.getElementById('msg');
-        const pulse = document.getElementById('pulse');
-        const audioBtn = document.getElementById('enableAudio');
+const socket = io('https://my-child-monitor.onrender.com'); 
+const msg = document.getElementById('msg');
+const pulse = document.getElementById('pulse');
+const audioBtn = document.getElementById('enableAudio');
+
+let audioContext;
+let nextStartTime = 0;
+
+audioBtn.onclick = () => {
+    // אתחול מערכת הסאונד בלחיצת כפתור (חובה בדפדפן)
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    audioBtn.style.display = 'none';
+    msg.innerText = "מתחבר לשידור...";
+    socket.emit('join-room');
+};
+
+socket.on('play-audio', async (audioData) => {
+    if (!audioContext) return;
+
+    try {
+        // המרת הנתונים שהתקבלו למערך בינארי
+        const arrayBuffer = await new Response(audioData).arrayBuffer();
         
-        let canPlay = false;
+        // פענוח הסאונד
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
-        audioBtn.onclick = () => {
-            canPlay = true;
-            audioBtn.style.display = 'none';
-            msg.innerText = "ממתין לשידור מהילד...";
-            socket.emit('join-room');
-        };
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
 
-        socket.on('play-audio', (audioBlob) => {
-            if (!canPlay) return;
+        // חישוב זמן הניגון כדי למנוע קפיצות ורווחים
+        const currentTime = audioContext.currentTime;
+        if (nextStartTime < currentTime) {
+            nextStartTime = currentTime;
+        }
 
-            msg.innerText = "שומע סביבה...";
-            pulse.classList.add('active');
+        source.start(nextStartTime);
+        nextStartTime += audioBuffer.duration;
 
-            // יצירת אובייקט סאונד מהנתונים שהגיעו
-            const blob = new Blob([audioBlob], { type: 'audio/webm; codecs=opus' });
-            const url = URL.createObjectURL(blob);
-            const audio = new Audio(url);
-            
-            audio.play().catch(e => console.log("שגיאת ניגון:", e));
-            
-            // ניקוי זיכרון אחרי שנייה
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
-        });
+        msg.innerText = "שומע סביבה בזמן אמת...";
+        pulse.classList.add('active');
+
+    } catch (e) {
+        // במקרה של שגיאת פענוח קטנה, פשוט נמשיך לחתיכה הבאה
+        console.log("Decoding delay...");
+    }
+});
     </script>
 </body>
 </html>
