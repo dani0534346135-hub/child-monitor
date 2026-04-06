@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>בקרת הורים - האזנה</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding-top: 50px; background: #f0f2f5; }
+        .box { background: white; padding: 30px; border-radius: 15px; display: inline-block; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .live-pulse { width: 15px; height: 15px; background: red; border-radius: 50%; display: inline-block; margin-left: 10px; animation: pulse 1s infinite; visibility: hidden; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h2>האזנה בזמן אמת <div id="pulse" class="live-pulse"></div></h2>
+        <p id="msg">ממתין לחיבור מהילד...</p>
+    </div>
+
+    <script>
+        const socket = io(); 
+        const msg = document.getElementById('msg');
+        const pulse = document.getElementById('pulse');
+
+        socket.emit('join-room');
+
+        socket.on('play-audio', (audioBlob) => {
+            msg.innerText = "שומע סביבה...";
+            pulse.style.visibility = "visible";
+
+            const blob = new Blob([audioBlob], { type: 'audio/webm' });
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            audio.play();
+        });
+    </script>
+</body>
+</html>
