@@ -15,7 +15,7 @@ const io = new Server(server, {
 });
 
 // מגיש באופן אוטומטי את כל הקבצים שבתיקיית public
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
 
 const PORT = process.env.PORT || 3000;
 const ROOM_ID = "family_private_room_123"; // מזהה חדר סודי
