@@ -6,7 +6,7 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 
-// הגדרת Socket.io עם הרשאות לכל מקור (CORS)
+// הגדרת Socket.io עם הרשאות מלאות
 const io = new Server(server, {
     cors: {
         origin: "*",
@@ -14,23 +14,22 @@ const io = new Server(server, {
     }
 });
 
-// מגיש באופן אוטומטי את כל הקבצים שבתיקיית public
+// הגשת קבצים מהתיקייה שבה נמצא השרת
 app.use(express.static(__dirname));
 
 const PORT = process.env.PORT || 3000;
-const ROOM_ID = "family_private_room_123"; // מזהה חדר סודי
+const ROOM_ID = "family_private_room_123";
 
 io.on('connection', (socket) => {
     console.log('מכשיר התחבר:', socket.id);
 
-    // הצטרפות לחדר משותף
     socket.on('join-room', () => {
         socket.join(ROOM_ID);
-        console.log(`מכשיר ${socket.id} הצטרף לחדר הבקרה`);
+        console.log(`מכשיר ${socket.id} הצטרף לחדר`);
     });
 
-    // קבלת נתוני אודיו מהילד והפצתם לכל מי שבחדר (להורה)
-    socket.on('audio-stream', (audioData) => {
+    // שינוי קריטי: השרת מקשיב ל-audio-data ומעביר הלאה כ-play-audio
+    socket.on('audio-data', (audioData) => {
         socket.to(ROOM_ID).emit('play-audio', audioData);
     });
 
