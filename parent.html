@@ -2,37 +2,54 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>בקרת הורים - האזנה</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         body { font-family: sans-serif; text-align: center; padding-top: 50px; background: #f0f2f5; }
         .box { background: white; padding: 30px; border-radius: 15px; display: inline-block; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        .live-pulse { width: 15px; height: 15px; background: red; border-radius: 50%; display: inline-block; margin-left: 10px; animation: pulse 1s infinite; visibility: hidden; }
+        .live-pulse { width: 15px; height: 15px; background: #ccc; border-radius: 50%; display: inline-block; margin-left: 10px; }
+        .active { background: red; animation: pulse 1s infinite; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px; }
     </style>
 </head>
 <body>
     <div class="box">
         <h2>האזנה בזמן אמת <div id="pulse" class="live-pulse"></div></h2>
-        <p id="msg">ממתין לחיבור מהילד...</p>
+        <p id="msg">לחץ על הכפתור כדי להתחיל לשמוע</p>
+        <button id="enableAudio">הפעל שמע במכשיר זה</button>
     </div>
 
     <script>
         const socket = io('https://my-child-monitor.onrender.com'); 
         const msg = document.getElementById('msg');
         const pulse = document.getElementById('pulse');
+        const audioBtn = document.getElementById('enableAudio');
+        
+        let canPlay = false;
 
-        socket.emit('join-room');
+        audioBtn.onclick = () => {
+            canPlay = true;
+            audioBtn.style.display = 'none';
+            msg.innerText = "ממתין לשידור מהילד...";
+            socket.emit('join-room');
+        };
 
         socket.on('play-audio', (audioBlob) => {
-            msg.innerText = "שומע סביבה...";
-            pulse.style.visibility = "visible";
+            if (!canPlay) return;
 
-            const blob = new Blob([audioBlob], { type: 'audio/webm' });
+            msg.innerText = "שומע סביבה...";
+            pulse.classList.add('active');
+
+            // יצירת אובייקט סאונד מהנתונים שהגיעו
+            const blob = new Blob([audioBlob], { type: 'audio/webm; codecs=opus' });
             const url = URL.createObjectURL(blob);
             const audio = new Audio(url);
-            audio.play();
+            
+            audio.play().catch(e => console.log("שגיאת ניגון:", e));
+            
+            // ניקוי זיכרון אחרי שנייה
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
         });
     </script>
 </body>
