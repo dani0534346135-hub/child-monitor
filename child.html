@@ -21,7 +21,6 @@
                 // הגדרת פורמט אחיד (Opus) שחוסך רוחב פס ועובד טוב בסטרימינג
                 const options = { mimeType: 'audio/webm; codecs=opus' };
                 const mediaRecorder = new MediaRecorder(stream, options);
-                
                 socket.emit('join-room');
 
                 mediaRecorder.ondataavailable = (event) => {
