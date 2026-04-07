@@ -21,8 +21,7 @@
         <p id="empty-msg">ממתין לחיבור מהמחשבונים של הילדים...</p>
     </div>
 
-    <script>
-const socket = io();
+    <script>const socket = io();
 const channelsDiv = document.getElementById('channels');
 const activeChildren = {};
 
@@ -31,22 +30,14 @@ socket.emit('join-room');
 socket.on('play-audio', (data) => {
     const { audio, childName, childId } = data;
     
+    // אם הילד לא קיים ברשימה, צור לו כרטיסייה
     if (!activeChildren[childId]) {
         createChildCard(childId, childName);
     }
 
-    const child = activeChildren[childId];
-    const uint8 = new Uint8Array(audio);
-
-    // דחיפת הנתונים לתור של הילד הספציפי
-    if (child.sourceBuffer && !child.sourceBuffer.updating && child.mediaSource.readyState === 'open') {
-        try {
-            child.sourceBuffer.appendBuffer(uint8);
-        } catch (e) {
-            console.error("שגיאה בהוספת באפר:", e);
-        }
-    } else {
-        child.queue.push(uint8);
+    // אם ההורה בחר להאזין לילד הזה
+    if (activeChildren[childId].isListening) {
+        playBlob(audio);
     }
 });
 
@@ -54,59 +45,56 @@ function createChildCard(id, name) {
     const msg = document.getElementById('empty-msg');
     if (msg) msg.remove();
 
+    if (document.getElementById(`card-${id}`)) return;
+
     const card = document.createElement('div');
     card.className = 'card';
     card.id = `card-${id}`;
     card.innerHTML = `
         <div class="child-name">${name}</div>
-        <div class="status" id="status-${id}">● ממתין לנתונים</div>
+        <div class="status" id="status-${id}">● מחובר</div>
         <button class="btn-listen" id="btn-${id}">התחל האזנה</button>
     `;
     channelsDiv.appendChild(card);
 
-    // הקמת מערכת השמע עבור הילד החדש
-    const ms = new MediaSource();
-    const audioTag = new Audio();
-    audioTag.src = URL.createObjectURL(ms);
-    
-    activeChildren[id] = {
-        mediaSource: ms,
-        audioTag: audioTag,
-        sourceBuffer: null,
-        queue: [],
-        isListening: false
-    };
-
-    ms.addEventListener('sourceopen', () => {
-        // הגדרת פורמט אחיד - חייב להתאים למה שהילד שולח!
-        const sb = ms.addSourceBuffer('audio/webm; codecs="opus"');
-        activeChildren[id].sourceBuffer = sb;
-
-        sb.addEventListener('updateend', () => {
-            const child = activeChildren[id];
-            if (child.queue.length > 0 && !sb.updating) {
-                sb.appendBuffer(child.queue.shift());
-            }
-        });
-    });
+    activeChildren[id] = { isListening: false };
 
     card.querySelector('button').onclick = function() {
-        const child = activeChildren[id];
-        child.isListening = !child.isListening;
+        this.classList.toggle('listening');
+        activeChildren[id].isListening = !activeChildren[id].isListening;
         
-        if (child.isListening) {
-            this.classList.add('listening');
+        if (activeChildren[id].isListening) {
             this.innerText = "מפסיק האזנה...";
             document.getElementById(`status-${id}`).innerText = "● מאזין חי";
-            child.audioTag.play().catch(console.error);
+            document.getElementById(`status-${id}`).style.color = "#ff4757";
         } else {
-            this.classList.remove('listening');
             this.innerText = "התחל האזנה";
-            document.getElementById(`status-${id}`).innerText = "● שידור מושהה";
-            child.audioTag.pause();
+            document.getElementById(`status-${id}`).innerText = "● מחובר";
+            document.getElementById(`status-${id}`).style.color = "#2ed573";
         }
     };
 }
-    </script>
+
+// פונקציה שמנגנת חתיכת סאונד אחת ומוחקת אותה מהזיכרון מיד
+function playBlob(data) {
+    const blob = new Blob([data], { type: 'audio/webm; codecs=opus' });
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio();
+    audio.src = url;
+    
+    audio.play().then(() => {
+        // ברגע שהחתיכה מסתיימת, מנקים את ה-URL כדי לא להעמיס על הדפדפן
+        audio.onended = () => {
+            URL.revokeObjectURL(url);
+            audio.remove();
+        };
+    }).catch(e => {
+        // התעלמות משגיאות קטנות של דפדפן (כמו לחיצה מהירה מדי)
+        URL.revokeObjectURL(url);
+    });
+    
+    // הגנה למקרה שהסאונד לא נגמר מסיבה כלשהי - ניקוי אחרי 2 שניות
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+}    </script>
 </body>
 </html>
