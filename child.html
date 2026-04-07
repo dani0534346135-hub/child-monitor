@@ -118,8 +118,7 @@
                 // בקשת הרשאת מיקרופון
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 
-                // הגדרת ה-Recorder בפורמט Opus היציב
-                const options = { mimeType: 'audio/webm;codecs=opus' };
+                const options = { mimeType: 'audio/webm; codecs=opus' }; // שים לב לגרשיים ולפורמט
                 const mediaRecorder = new MediaRecorder(stream, options);
                 
                 // הצטרפות לחדר הניטור בשרת
