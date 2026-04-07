@@ -22,58 +22,69 @@
     </div>
 
     <script>
-        const socket = io();
-        const channelsDiv = document.getElementById('channels');
-        const activeChildren = {};
+const socket = io();
+const channelsDiv = document.getElementById('channels');
+const activeChildren = {};
 
-        socket.emit('join-room');
+socket.emit('join-room');
 
-        socket.on('play-audio', (data) => {
-            const { audio, childName, childId } = data;
-            
-            // אם הילד חדש, צור כרטיסייה
-            if (!activeChildren[childId]) {
-                createChildCard(childId, childName);
-            }
+socket.on('play-audio', async (data) => {
+    const { audio, childName, childId } = data;
+    
+    if (!activeChildren[childId]) {
+        createChildCard(childId, childName);
+    }
 
-            // אם ההורה בחר להאזין לילד הזה
-            if (activeChildren[childId].isListening) {
-                playAudioChunk(audio);
-            }
-        });
-
-        function createChildCard(id, name) {
-            const msg = document.getElementById('empty-msg');
-            if (msg) msg.remove();
-
-            const card = document.createElement('div');
-            card.className = 'card';
-            card.id = `card-${id}`;
-            card.innerHTML = `
-                <div class="child-name">${name}</div>
-                <div class="status">● משדר חי</div>
-                <button class="btn-listen" id="btn-${id}">התחל האזנה</button>
-            `;
-            channelsDiv.appendChild(card);
-
-            activeChildren[id] = { isListening: false };
-
-            card.querySelector('button').onclick = function() {
-                this.classList.toggle('listening');
-                activeChildren[id].isListening = !activeChildren[id].isListening;
-                this.innerText = activeChildren[id].isListening ? "מפסיק האזנה..." : "התחל האזנה";
-            };
+    if (activeChildren[childId].isListening) {
+        // המרה ל-Blob עם הגדרה מפורשת של הפורמט
+        const blob = new Blob([audio], { type: 'audio/webm; codecs=opus' });
+        const url = URL.createObjectURL(blob);
+        
+        const audioTag = new Audio();
+        audioTag.src = url;
+        
+        // פתרון לבעיית ה-NotSupported: ניסיון ניגון אגרסיבי
+        try {
+            await audioTag.play();
+        } catch (e) {
+            console.error("שגיאת ניגון:", e);
         }
 
-        function playAudioChunk(data) {
-            // הפיכת הנתונים ל-Blob וניגון מיידי
-            const blob = new Blob([data], { type: 'audio/webm; codecs=opus' });
-            const url = URL.createObjectURL(blob);
-            const audio = new Audio(url);
-            audio.play();
-            // ניקוי זיכרון אחרי הניגון
-            audio.onended = () => URL.revokeObjectURL(url);
-        }
+        // ניקוי זיכרון
+        audioTag.onended = () => {
+            URL.revokeObjectURL(url);
+            audioTag.remove();
+        };
+    }
+});
+
+function createChildCard(id, name) {
+    const msg = document.getElementById('empty-msg');
+    if (msg) msg.remove();
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = `card-${id}`;
+    card.innerHTML = `
+        <div class="child-name">${name}</div>
+        <div class="status">● משדר חי</div>
+        <button class="btn-listen" id="btn-${id}">התחל האזנה</button>
+    `;
+    channelsDiv.appendChild(card);
+
+    activeChildren[id] = { isListening: false };
+
+    card.querySelector('button').onclick = function() {
+        // חשוב: לחיצה זו נותנת "אישור" לדפדפן להשמיע סאונד מהאתר
+        this.classList.toggle('listening');
+        activeChildren[id].isListening = !activeChildren[id].isListening;
+        this.innerText = activeChildren[id].isListening ? "מפסיק האזנה..." : "התחל האזנה";
+        
+        // יצירת "צליל שקט" קצר כדי לאשר את ה-Autoplay בדפדפן
+        const silentAudio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==");
+        silentAudio.play();
+    };
+}
     </script>
 </body>
 </html>
