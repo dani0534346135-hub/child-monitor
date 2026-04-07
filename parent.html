@@ -1,31 +1,72 @@
-// החלף את כל ה-script ב-parent.html
-const socket = io('https://my-child-monitor.onrender.com');
-const audio = new Audio();
-const mediaSource = new MediaSource();
-audio.src = URL.createObjectURL(mediaSource);
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>בקרת הורים - האזנה</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body style="font-family: sans-serif; text-align: center; padding-top: 50px; background: #f0f2f5;">
+    <div style="background: white; padding: 30px; border-radius: 15px; display: inline-block; box-shadow: 0 4px 10px rgba(0,0,0,0.1); min-width: 320px;">
+        <h2>האזנה בזמן אמת <div id="pulse" style="width: 15px; height: 15px; background: #ccc; border-radius: 50%; display: inline-block; margin-right: 10px;"></div></h2>
+        <p id="msg">לחץ להתחלת האזנה</p>
+        <button id="enableAudio" style="padding: 12px 24px; background: #007bff; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">הפעל שמע</button>
+        <div id="debug" style="margin-top: 15px; font-size: 11px; color: #888;">ממתין לפעולה...</div>
+    </div>
 
-let sourceBuffer;
-let queue = [];
+    <script>
+        const socket = io();
+        const msg = document.getElementById('msg');
+        const debug = document.getElementById('debug');
+        const pulse = document.getElementById('pulse');
 
-audioBtn.onclick = () => {
-    audioBtn.style.display = 'none';
-    mediaSource.addEventListener('sourceopen', () => {
-        sourceBuffer = mediaSource.addSourceBuffer('audio/webm;codecs=opus');
-        sourceBuffer.onupdateend = () => {
-            if (queue.length > 0 && !sourceBuffer.updating) {
-                sourceBuffer.appendBuffer(queue.shift());
+        let mediaSource = new MediaSource();
+        let audio = new Audio();
+        audio.src = URL.createObjectURL(mediaSource);
+        let sourceBuffer;
+        let queue = [];
+
+        document.getElementById('enableAudio').onclick = () => {
+            document.getElementById('enableAudio').style.display = 'none';
+            msg.innerText = "מתחבר לשידור...";
+            
+            if (mediaSource.readyState === 'open') {
+                setupBuffer();
+            } else {
+                mediaSource.addEventListener('sourceopen', setupBuffer);
             }
+            audio.play();
         };
-        socket.emit('join-room');
-    });
-    audio.play();
-};
 
-socket.on('play-audio', async (data) => {
-    const buffer = new Uint8Array(data);
-    if (sourceBuffer && !sourceBuffer.updating) {
-        sourceBuffer.appendBuffer(buffer);
-    } else {
-        queue.push(buffer);
-    }
-});
+        function setupBuffer() {
+            if (!sourceBuffer) {
+                // הגדרת ה-Buffer בדיוק לפי מה שהילד שולח
+                sourceBuffer = mediaSource.addSourceBuffer('audio/webm;codecs=opus');
+                
+                // ניהול תור: ברגע שחתיכה מסתיימת, נכניס את הבאה מהתור
+                sourceBuffer.addEventListener('updateend', () => {
+                    if (queue.length > 0 && !sourceBuffer.updating) {
+                        sourceBuffer.appendBuffer(queue.shift());
+                    }
+                });
+
+                socket.emit('join-room');
+                debug.innerText = "צינור שמע פתוח. ממתין לנתונים...";
+            }
+        }
+
+        socket.on('play-audio', async (data) => {
+            const uint8 = new Uint8Array(data);
+            
+            if (sourceBuffer && !sourceBuffer.updating) {
+                sourceBuffer.appendBuffer(uint8);
+                msg.innerText = "שומע סביבה...";
+                pulse.style.background = "red";
+                debug.innerText = "נתונים מתקבלים בזמן אמת";
+            } else {
+                queue.push(uint8);
+            }
+        });
+    </script>
+</body>
+</html>
