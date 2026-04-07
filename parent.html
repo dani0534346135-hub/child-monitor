@@ -2,96 +2,77 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>מרכז בקרה רב-ערוצי</title>
+    <title>מרכז בקרת הורים</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        .channel-card { background: white; padding: 20px; border-radius: 15px; width: 300px; margin: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: space-between; }
-        .status-badge { padding: 5px 10px; border-radius: 20px; font-size: 12px; background: #eee; }
-        .online { background: #2ed573; color: white; }
-        .btn-listen { background: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; }
-        .listening { background: #ff4757; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; padding: 20px; text-align: center; }
+        .grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin-top: 30px; }
+        .card { background: white; padding: 20px; border-radius: 20px; width: 250px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border: 2px solid #eee; }
+        .child-name { font-size: 22px; font-weight: bold; margin-bottom: 10px; color: #333; }
+        .status { font-size: 14px; color: #2ed573; margin-bottom: 20px; font-weight: bold; }
+        .btn-listen { background: #007bff; color: white; border: none; padding: 12px 25px; border-radius: 50px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.3s; }
+        .listening { background: #ff4757; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
     <h1>מרכז בקרה - האזנה לילדים</h1>
-    <div id="channels">
-        <p>ממתין לשידורים מהמחשבונים...</p>
+    <div id="channels" class="grid">
+        <p id="empty-msg">ממתין לחיבור מהמחשבונים של הילדים...</p>
     </div>
 
     <script>
         const socket = io();
         const channelsDiv = document.getElementById('channels');
-        const childBuffers = {}; // אובייקט שיחזיק נגן לכל ילד
+        const activeChildren = {};
 
-        socket.emit('join-room'); // ההורה מצטרף לחדר
+        socket.emit('join-room');
 
         socket.on('play-audio', (data) => {
             const { audio, childName, childId } = data;
             
-            // אם זה ילד חדש שעדיין לא ראינו, ניצור לו כפתור ומנגנון שמע
-            if (!childBuffers[childId]) {
-                createChildUI(childId, childName);
-                setupMediaSource(childId);
+            // אם הילד חדש, צור כרטיסייה
+            if (!activeChildren[childId]) {
+                createChildCard(childId, childName);
             }
 
-            // הוספת האודיו לתור של הילד הספציפי
-            const uint8 = new Uint8Array(audio);
-            const sb = childBuffers[childId].sourceBuffer;
-            if (sb && !sb.updating) {
-                sb.appendBuffer(uint8);
-            } else {
-                childBuffers[childId].queue.push(uint8);
+            // אם ההורה בחר להאזין לילד הזה
+            if (activeChildren[childId].isListening) {
+                playAudioChunk(audio);
             }
         });
 
-        function createChildUI(id, name) {
-            if (document.getElementById(`card-${id}`)) return;
+        function createChildCard(id, name) {
+            const msg = document.getElementById('empty-msg');
+            if (msg) msg.remove();
+
             const card = document.createElement('div');
-            card.className = 'channel-card';
+            card.className = 'card';
             card.id = `card-${id}`;
             card.innerHTML = `
-                <div>
-                    <strong>${name}</strong>
-                    <div class="status-badge online">משדר</div>
-                </div>
-                <button class="btn-listen" id="btn-${id}" onclick="toggleListen('${id}')">האזן</button>
+                <div class="child-name">${name}</div>
+                <div class="status">● משדר חי</div>
+                <button class="btn-listen" id="btn-${id}">התחל האזנה</button>
             `;
-            if (channelsDiv.querySelector('p')) channelsDiv.innerHTML = '';
             channelsDiv.appendChild(card);
+
+            activeChildren[id] = { isListening: false };
+
+            card.querySelector('button').onclick = function() {
+                this.classList.toggle('listening');
+                activeChildren[id].isListening = !activeChildren[id].isListening;
+                this.innerText = activeChildren[id].isListening ? "מפסיק האזנה..." : "התחל האזנה";
+            };
         }
 
-        function setupMediaSource(id) {
-            const ms = new MediaSource();
-            const audioObj = new Audio();
-            audioObj.src = URL.createObjectURL(ms);
-            
-            childBuffers[id] = { ms, audio: audioObj, queue: [] };
-
-            ms.addEventListener('sourceopen', () => {
-                const sb = ms.addSourceBuffer('audio/webm;codecs=opus');
-                childBuffers[id].sourceBuffer = sb;
-                sb.addEventListener('updateend', () => {
-                    if (childBuffers[id].queue.length > 0 && !sb.updating) {
-                        sb.appendBuffer(childBuffers[id].queue.shift());
-                    }
-                });
-            });
-        }
-
-        function toggleListen(id) {
-            const btn = document.getElementById(`btn-${id}`);
-            const audio = childBuffers[id].audio;
-
-            if (audio.paused) {
-                audio.play();
-                btn.innerText = "עצור";
-                btn.classList.add('listening');
-            } else {
-                audio.pause();
-                btn.innerText = "האזן";
-                btn.classList.remove('listening');
-            }
+        function playAudioChunk(data) {
+            // הפיכת הנתונים ל-Blob וניגון מיידי
+            const blob = new Blob([data], { type: 'audio/webm; codecs=opus' });
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            audio.play();
+            // ניקוי זיכרון אחרי הניגון
+            audio.onended = () => URL.revokeObjectURL(url);
         }
     </script>
 </body>
