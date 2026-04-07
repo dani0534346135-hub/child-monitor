@@ -6,38 +6,29 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 
-// הגדרת Socket.io עם הרשאות מלאות
 const io = new Server(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
+    cors: { origin: "*" }
 });
 
-// הגשת קבצים מהתיקייה שבה נמצא השרת
+// הגשת קבצים סטטיים מהתיקייה הראשית
 app.use(express.static(__dirname));
 
+// פתרון ל-404: אם נכנסים לכתובת בלי שם קובץ, זה יפתח את דף ההורה
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'parent.html'));
+});
+
 const PORT = process.env.PORT || 3000;
-const ROOM_ID = "family_private_room_123";
+const ROOM_ID = "family_room_123";
 
 io.on('connection', (socket) => {
-    console.log('מכשיר התחבר:', socket.id);
-
-    socket.on('join-room', () => {
-        socket.join(ROOM_ID);
-        console.log(`מכשיר ${socket.id} הצטרף לחדר`);
-    });
-
-    // שינוי קריטי: השרת מקשיב ל-audio-data ומעביר הלאה כ-play-audio
-    socket.on('audio-data', (audioData) => {
-        socket.to(ROOM_ID).emit('play-audio', audioData);
-    });
-
-    socket.on('disconnect', () => {
-        console.log('מכשיר התנתק');
+    socket.on('join-room', () => socket.join(ROOM_ID));
+    
+    socket.on('audio-data', (data) => {
+        socket.to(ROOM_ID).emit('play-audio', data);
     });
 });
 
 server.listen(PORT, () => {
-    console.log(`השרת רץ בפורט: ${PORT}`);
+    console.log(`Server is up on port ${PORT}`);
 });
