@@ -12,16 +12,14 @@ app.use(express.static(__dirname));
 const ROOM_ID = "monitor_room_global";
 
 io.on('connection', (socket) => {
-    // הצטרפות לחדר הכללי
     socket.on('join-room', (userData) => {
         socket.join(ROOM_ID);
-        // שמירת שם הילד על הסוקט כדי שנדע מי זה
         socket.userName = userData ? userData.name : "ילד ללא שם";
-        console.log(`${socket.userName} מחובר`);
+        console.log(`מכשיר מחובר: ${socket.userName}`);
     });
 
-    // העברת נתוני אודיו + שם הילד
     socket.on('audio-data', (data) => {
+        // שולחים את האודיו לכל מי שבחדר (להורה)
         socket.to(ROOM_ID).emit('play-audio', {
             audio: data,
             childName: socket.userName,
