@@ -24,42 +24,58 @@
     </div>
 
     <script>
-const socket = io('https://my-child-monitor.onrender.com'); 
-const msg = document.getElementById('msg');
-const pulse = document.getElementById('pulse');
-const audioBtn = document.getElementById('enableAudio');
+        const socket = io('https://my-child-monitor.onrender.com'); 
+        const msg = document.getElementById('msg');
+        const pulse = document.getElementById('pulse');
+        const audioBtn = document.getElementById('enableAudio');
+        const debug = document.getElementById('debug');
 
-let mediaSource = new MediaSource();
-let audio = new Audio();
-audio.src = URL.createObjectURL(mediaSource);
-let sourceBuffer;
+        let mediaSource = new MediaSource();
+        let audio = new Audio();
+        audio.src = URL.createObjectURL(mediaSource);
+        let sourceBuffer;
+        let queue = [];
 
-audioBtn.onclick = () => {
-    audioBtn.style.display = 'none';
-    msg.innerText = "מתחבר לשידור...";
-    
-    mediaSource.addEventListener('sourceopen', () => {
-        // הגדרת הפורמט המדויק שהילד שולח
-        sourceBuffer = mediaSource.addSourceBuffer('audio/webm; codecs="opus"');
-        socket.emit('join-room');
-    });
-    
-    audio.play(); // פותח את ערוץ השמע
-};
+        audioBtn.onclick = () => {
+            audioBtn.style.display = 'none';
+            msg.innerText = "מתחבר לשידור...";
+            
+            if (mediaSource.readyState === 'open') {
+                setupBuffer();
+            } else {
+                mediaSource.addEventListener('sourceopen', setupBuffer);
+            }
+            
+            audio.play().catch(e => console.log("אודיו דורש אינטראקציה:", e));
+        };
 
-socket.on('play-audio', async (audioData) => {
-    if (!sourceBuffer || sourceBuffer.updating) return;
+        function setupBuffer() {
+            if (!sourceBuffer) {
+                sourceBuffer = mediaSource.addSourceBuffer('audio/webm; codecs="opus"');
+                sourceBuffer.addEventListener('updateend', () => {
+                    if (queue.length > 0 && !sourceBuffer.updating) {
+                        sourceBuffer.appendBuffer(queue.shift());
+                    }
+                });
+                socket.emit('join-room');
+                debug.innerText = "מחובר ומאזין...";
+            }
+        }
 
-    try {
-        // הוספת חתיכת הסאונד ישירות לצינור הנגינה
-        sourceBuffer.appendBuffer(new Uint8Array(audioData));
-        
-        msg.innerText = "שומע סביבה...";
-        pulse.classList.add('active');
-    } catch (e) {
-        console.error("שגיאה בהזרמת נתונים:", e);
-    }
-});
+        socket.on('play-audio', async (audioData) => {
+            const data = new Uint8Array(audioData);
+            
+            if (sourceBuffer && !sourceBuffer.updating) {
+                sourceBuffer.appendBuffer(data);
+                msg.innerText = "שומע סביבה...";
+                pulse.classList.add('active');
+            } else {
+                queue.push(data);
+            }
+        });
+
+        socket.on('connect', () => debug.innerText = "מחובר לשרת");
+        socket.on('disconnect', () => debug.innerText = "החיבור לשרת הופסק");
     </script>
 </body>
 </html>
