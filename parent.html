@@ -28,33 +28,25 @@ const activeChildren = {};
 
 socket.emit('join-room');
 
-socket.on('play-audio', async (data) => {
+socket.on('play-audio', (data) => {
     const { audio, childName, childId } = data;
     
     if (!activeChildren[childId]) {
         createChildCard(childId, childName);
     }
 
-    if (activeChildren[childId].isListening) {
-        // המרה ל-Blob עם הגדרה מפורשת של הפורמט
-        const blob = new Blob([audio], { type: 'audio/webm; codecs=opus' });
-        const url = URL.createObjectURL(blob);
-        
-        const audioTag = new Audio();
-        audioTag.src = url;
-        
-        // פתרון לבעיית ה-NotSupported: ניסיון ניגון אגרסיבי
-        try {
-            await audioTag.play();
-        } catch (e) {
-            console.error("שגיאת ניגון:", e);
-        }
+    const child = activeChildren[childId];
+    const uint8 = new Uint8Array(audio);
 
-        // ניקוי זיכרון
-        audioTag.onended = () => {
-            URL.revokeObjectURL(url);
-            audioTag.remove();
-        };
+    // דחיפת הנתונים לתור של הילד הספציפי
+    if (child.sourceBuffer && !child.sourceBuffer.updating && child.mediaSource.readyState === 'open') {
+        try {
+            child.sourceBuffer.appendBuffer(uint8);
+        } catch (e) {
+            console.error("שגיאה בהוספת באפר:", e);
+        }
+    } else {
+        child.queue.push(uint8);
     }
 });
 
@@ -67,22 +59,52 @@ function createChildCard(id, name) {
     card.id = `card-${id}`;
     card.innerHTML = `
         <div class="child-name">${name}</div>
-        <div class="status">● משדר חי</div>
+        <div class="status" id="status-${id}">● ממתין לנתונים</div>
         <button class="btn-listen" id="btn-${id}">התחל האזנה</button>
     `;
     channelsDiv.appendChild(card);
 
-    activeChildren[id] = { isListening: false };
+    // הקמת מערכת השמע עבור הילד החדש
+    const ms = new MediaSource();
+    const audioTag = new Audio();
+    audioTag.src = URL.createObjectURL(ms);
+    
+    activeChildren[id] = {
+        mediaSource: ms,
+        audioTag: audioTag,
+        sourceBuffer: null,
+        queue: [],
+        isListening: false
+    };
+
+    ms.addEventListener('sourceopen', () => {
+        // הגדרת פורמט אחיד - חייב להתאים למה שהילד שולח!
+        const sb = ms.addSourceBuffer('audio/webm; codecs="opus"');
+        activeChildren[id].sourceBuffer = sb;
+
+        sb.addEventListener('updateend', () => {
+            const child = activeChildren[id];
+            if (child.queue.length > 0 && !sb.updating) {
+                sb.appendBuffer(child.queue.shift());
+            }
+        });
+    });
 
     card.querySelector('button').onclick = function() {
-        // חשוב: לחיצה זו נותנת "אישור" לדפדפן להשמיע סאונד מהאתר
-        this.classList.toggle('listening');
-        activeChildren[id].isListening = !activeChildren[id].isListening;
-        this.innerText = activeChildren[id].isListening ? "מפסיק האזנה..." : "התחל האזנה";
+        const child = activeChildren[id];
+        child.isListening = !child.isListening;
         
-        // יצירת "צליל שקט" קצר כדי לאשר את ה-Autoplay בדפדפן
-        const silentAudio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==");
-        silentAudio.play();
+        if (child.isListening) {
+            this.classList.add('listening');
+            this.innerText = "מפסיק האזנה...";
+            document.getElementById(`status-${id}`).innerText = "● מאזין חי";
+            child.audioTag.play().catch(console.error);
+        } else {
+            this.classList.remove('listening');
+            this.innerText = "התחל האזנה";
+            document.getElementById(`status-${id}`).innerText = "● שידור מושהה";
+            child.audioTag.pause();
+        }
     };
 }
     </script>
