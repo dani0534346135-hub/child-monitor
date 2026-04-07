@@ -12,35 +12,26 @@
     <div id="status" style="margin-top: 20px; font-weight: bold; color: #d32f2f;">סטטוס: כבוי</div>
 
     <script>
-        const socket = io(); // מתחבר לאותו שרת שבו נמצא הקובץ
+const urlParams = new URLSearchParams(window.location.search);
+const myName = urlParams.get('name') || "ילד";
 
-        document.getElementById('startBtn').onclick = async () => {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                
-                // הגדרת פורמט אחיד ונתמך
-                const options = { mimeType: 'audio/webm;codecs=opus' };
-                const mediaRecorder = new MediaRecorder(stream, options);
-                
-                socket.emit('join-room');
+async function startBroadcast() {
+    try {
+        if ('wakeLock' in navigator) await navigator.wakeLock.request('screen');
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+        
+        // שליחת השם לשרת בזמן ההתחברות
+        socket.emit('join-room', { name: myName });
 
-                mediaRecorder.ondataavailable = (event) => {
-                    if (event.data.size > 0) {
-                        socket.emit('audio-data', event.data);
-                    }
-                };
-
-                // שליחה כל 1000ms (שנייה אחת) ליציבות מקסימלית
-                mediaRecorder.start(1000); 
-                
-                document.getElementById('status').innerText = "סטטוס: משדר סאונד...";
-                document.getElementById('status').style.color = "green";
-                document.getElementById('startBtn').disabled = true;
-                document.getElementById('startBtn').innerText = "שידור פעיל";
-            } catch (err) {
-                alert("שגיאה בגישה למיקרופון: " + err.message);
-            }
+        mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) socket.emit('audio-data', event.data);
         };
+        mediaRecorder.start(1000);
+    } catch (err) {
+        document.querySelector('.btn-eq').addEventListener('click', startBroadcast, { once: true });
+    }
+}
     </script>
 </body>
 </html>
