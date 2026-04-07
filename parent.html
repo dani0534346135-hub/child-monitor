@@ -24,61 +24,42 @@
     </div>
 
     <script>
-        // התחברות לשרת - וודא שהכתובת נכונה
-        const socket = io('https://my-child-monitor.onrender.com'); 
-        const msg = document.getElementById('msg');
-        const pulse = document.getElementById('pulse');
-        const audioBtn = document.getElementById('enableAudio');
-        const debug = document.getElementById('debug');
+const socket = io('https://my-child-monitor.onrender.com'); 
+const msg = document.getElementById('msg');
+const pulse = document.getElementById('pulse');
+const audioBtn = document.getElementById('enableAudio');
+
+let mediaSource = new MediaSource();
+let audio = new Audio();
+audio.src = URL.createObjectURL(mediaSource);
+let sourceBuffer;
+
+audioBtn.onclick = () => {
+    audioBtn.style.display = 'none';
+    msg.innerText = "מתחבר לשידור...";
+    
+    mediaSource.addEventListener('sourceopen', () => {
+        // הגדרת הפורמט המדויק שהילד שולח
+        sourceBuffer = mediaSource.addSourceBuffer('audio/webm; codecs="opus"');
+        socket.emit('join-room');
+    });
+    
+    audio.play(); // פותח את ערוץ השמע
+};
+
+socket.on('play-audio', async (audioData) => {
+    if (!sourceBuffer || sourceBuffer.updating) return;
+
+    try {
+        // הוספת חתיכת הסאונד ישירות לצינור הנגינה
+        sourceBuffer.appendBuffer(new Uint8Array(audioData));
         
-        let isStarted = false;
-
-        // הפעלת האודיו בלחיצה (חובה בדפדפנים מודרניים)
-        audioBtn.onclick = () => {
-            isStarted = true;
-            audioBtn.style.display = 'none';
-            msg.innerText = "מקשיב לשידור...";
-            debug.innerText = "סטטוס: מחובר, ממתין לנתונים מהילד...";
-            socket.emit('join-room');
-        };
-
-        // קבלת נתוני האודיו
-        socket.on('play-audio', (audioData) => {
-            if (!isStarted) return;
-
-            // עדכון ויזואלי שהנתונים הגיעו
-            pulse.classList.add('active');
-            debug.innerText = "נתונים מתקבלים! גודל חבילה: " + audioData.byteLength + " bytes";
-
-            try {
-                // יצירת Blob מהנתונים
-                const blob = new Blob([audioData], { type: 'audio/webm; codecs=opus' });
-                const url = URL.createObjectURL(blob);
-                
-                // יצירת אלמנט אודיו וניגונו מיד
-                const audio = new Audio();
-                audio.src = url;
-                audio.play().then(() => {
-                    // ניקוי ה-URL מהזיכרון אחרי הניגון
-                    setTimeout(() => URL.revokeObjectURL(url), 2000);
-                }).catch(e => {
-                    console.error("שגיאת ניגון:", e);
-                    debug.innerText = "שגיאה בניגון האודיו. בדוק ווליום.";
-                });
-            } catch (err) {
-                console.error("שגיאת עיבוד:", err);
-            }
-        });
-
-        // בדיקת חיבור לשרת
-        socket.on('connect', () => {
-            debug.innerText = "מחובר לשרת בהצלחה!";
-        });
-
-        socket.on('disconnect', () => {
-            debug.innerText = "החיבור לשרת נותק.";
-            pulse.classList.remove('active');
-        });
+        msg.innerText = "שומע סביבה...";
+        pulse.classList.add('active');
+    } catch (e) {
+        console.error("שגיאה בהזרמת נתונים:", e);
+    }
+});
     </script>
 </body>
 </html>
