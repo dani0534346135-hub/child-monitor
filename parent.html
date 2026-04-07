@@ -1,68 +1,31 @@
-<!DOCTYPE html>
-<html lang="he" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>בקרת הורים - האזנה</title>
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <style>
-        body { font-family: sans-serif; text-align: center; padding-top: 50px; background: #f0f2f5; }
-        .box { background: white; padding: 30px; border-radius: 15px; display: inline-block; box-shadow: 0 4px 10px rgba(0,0,0,0.1); min-width: 300px; }
-        .live-pulse { width: 15px; height: 15px; background: #ccc; border-radius: 50%; display: inline-block; margin-left: 10px; }
-        .active { background: red; animation: pulse 1s infinite; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
-        button { padding: 12px 24px; font-size: 16px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 8px; font-weight: bold; }
-        #debug { margin-top: 20px; font-size: 12px; color: #666; }
-    </style>
-</head>
-<body>
-    <div class="box">
-        <h2>האזנה בזמן אמת <div id="pulse" class="live-pulse"></div></h2>
-        <p id="msg">לחץ על הכפתור כדי להתחיל לשמוע</p>
-        <button id="enableAudio">הפעל שמע במכשיר זה</button>
-        <div id="debug">סטטוס: ממתין לחיבור...</div>
-    </div>
+// החלף את כל ה-script ב-parent.html
+const socket = io('https://my-child-monitor.onrender.com');
+const audio = new Audio();
+const mediaSource = new MediaSource();
+audio.src = URL.createObjectURL(mediaSource);
 
-    <script>
-const socket = io('https://my-child-monitor.onrender.com'); 
-const msg = document.getElementById('msg');
-const pulse = document.getElementById('pulse');
-const audioBtn = document.getElementById('enableAudio');
-const debug = document.getElementById('debug');
-
-let isStarted = false;
+let sourceBuffer;
+let queue = [];
 
 audioBtn.onclick = () => {
-    isStarted = true;
     audioBtn.style.display = 'none';
-    msg.innerText = "מאזין לסביבה...";
-    debug.innerText = "מחובר לחדר, ממתין לסאונד...";
-    socket.emit('join-room');
+    mediaSource.addEventListener('sourceopen', () => {
+        sourceBuffer = mediaSource.addSourceBuffer('audio/webm;codecs=opus');
+        sourceBuffer.onupdateend = () => {
+            if (queue.length > 0 && !sourceBuffer.updating) {
+                sourceBuffer.appendBuffer(queue.shift());
+            }
+        };
+        socket.emit('join-room');
+    });
+    audio.play();
 };
 
-socket.on('play-audio', (audioData) => {
-    if (!isStarted) return;
-
-    // הפיכת הנתונים ל-Blob בפורמט Opus
-    const blob = new Blob([audioData], { type: 'audio/webm; codecs=opus' });
-    const url = URL.createObjectURL(blob);
-    
-    const audio = new Audio();
-    audio.src = url;
-    
-    audio.play().then(() => {
-        pulse.classList.add('active');
-        debug.innerText = "סאונד מתקבל ומנוגן!";
-        // ניקוי זיכרון
-        setTimeout(() => URL.revokeObjectURL(url), 2000);
-    }).catch(err => {
-        // אם יש שגיאה, ננסה "לדחוף" את הניגון שוב
-        console.log("ניסיון ניגון נוסף...");
-        debug.innerText = "מנסה לפענח חבילת סאונד...";
-    });
+socket.on('play-audio', async (data) => {
+    const buffer = new Uint8Array(data);
+    if (sourceBuffer && !sourceBuffer.updating) {
+        sourceBuffer.appendBuffer(buffer);
+    } else {
+        queue.push(buffer);
+    }
 });
-
-socket.on('connect', () => debug.innerText = "מחובר לשרת בהצלחה");
-    </script>
-</body>
-</html>
