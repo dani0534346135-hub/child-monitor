@@ -8,19 +8,20 @@
 </head>
 <body style="font-family: sans-serif; text-align: center; padding-top: 50px; background: #fff5f5;">
     <h1>יחידת קצה - ילד</h1>
-    <button id="startBtn" style="padding: 15px 30px; font-size: 18px; background: #ff4757; color: white; border: none; border-radius: 10px;">הפעל שידור סביבה</button>
+    <button id="startBtn" style="padding: 15px 30px; font-size: 18px; background: #ff4757; color: white; border: none; border-radius: 10px; cursor: pointer;">הפעל שידור סביבה</button>
     <div id="status" style="margin-top: 20px; font-weight: bold; color: #d32f2f;">סטטוס: כבוי</div>
 
     <script>
-        const socket = io('https://my-child-monitor.onrender.com');
+        const socket = io(); // מתחבר לאותו שרת שבו נמצא הקובץ
 
         document.getElementById('startBtn').onclick = async () => {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 
-                // הגדרת פורמט אחיד (Opus) שחוסך רוחב פס ועובד טוב בסטרימינג
-                const options = { mimeType: 'audio/webm; codecs=opus' };
+                // הגדרת פורמט אחיד ונתמך
+                const options = { mimeType: 'audio/webm;codecs=opus' };
                 const mediaRecorder = new MediaRecorder(stream, options);
+                
                 socket.emit('join-room');
 
                 mediaRecorder.ondataavailable = (event) => {
@@ -29,11 +30,13 @@
                     }
                 };
 
-                mediaRecorder.start(500); // שליחה כל חצי שנייה
+                // שליחה כל 1000ms (שנייה אחת) ליציבות מקסימלית
+                mediaRecorder.start(1000); 
                 
                 document.getElementById('status').innerText = "סטטוס: משדר סאונד...";
                 document.getElementById('status').style.color = "green";
                 document.getElementById('startBtn').disabled = true;
+                document.getElementById('startBtn').innerText = "שידור פעיל";
             } catch (err) {
                 alert("שגיאה בגישה למיקרופון: " + err.message);
             }
