@@ -5,22 +5,22 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+const io = new Server(server, { 
+    cors: { origin: "*" },
+    maxHttpBufferSize: 1e7 // מאפשר העברת חבילות מידע גדולות
+});
 
 app.use(express.static(__dirname));
 
-const ROOM_ID = "monitor_room_global";
-
 io.on('connection', (socket) => {
     socket.on('join-room', (userData) => {
-        socket.join(ROOM_ID);
-        socket.userName = userData ? userData.name : "ילד ללא שם";
-        console.log(`מכשיר מחובר: ${socket.userName}`);
+        socket.join("monitor_room");
+        socket.userName = userData ? userData.name : "ילד";
+        console.log(`מחובר: ${socket.userName}`);
     });
 
     socket.on('audio-data', (data) => {
-        // שולחים את האודיו לכל מי שבחדר (להורה)
-        socket.to(ROOM_ID).emit('play-audio', {
+        socket.to("monitor_room").emit('play-audio', {
             audio: data,
             childName: socket.userName,
             childId: socket.id
